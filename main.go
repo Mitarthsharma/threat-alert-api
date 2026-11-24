@@ -12,6 +12,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /register", registerHandler(store))
+	mux.HandleFunc("POST /users", createUserHandler(store))
+mux.HandleFunc("POST /apps", createAppHandler(store))
 
 	port := os.Getenv("PORT")
 	if port == "" {
