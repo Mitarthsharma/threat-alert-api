@@ -90,7 +90,7 @@ Since the project uses in-memory storage, all data is lost when the server resta
 
 - **Two prompts I used:**
   1. "Can you help me create a company registration API in Go? It should create the company and its first admin, generate random IDs and tokens, validate the input, and use only the standard library."
-  2. "How can I safely handle 50 simultaneous identical alert requests in Go using sync.Mutex and prevent race conditions?"
+  2. "I've completed the backend API and implemented all the required routes. Can you please review my entire project and check whether all the routes are implemented correctly according to the assignment requirements?"
 
 - **One thing the AI got wrong, and how I found and fixed it:** During implementation, an unused variable caused a compilation error (`app declared and not used`). I checked the compiler output and corrected the declaration.
 
