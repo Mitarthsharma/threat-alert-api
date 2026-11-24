@@ -15,7 +15,9 @@ func main() {
 	mux.HandleFunc("POST /users", createUserHandler(store))
 mux.HandleFunc("POST /apps", createAppHandler(store))
 mux.HandleFunc("POST /alerts", reportAlertHandler(store))
-
+mux.HandleFunc("GET /alerts", getAlertsHandler(store))
+mux.HandleFunc("GET /alerts/{id}", getAlertByIDHandler(store))
+mux.HandleFunc("POST /alerts/{id}/resolve", resolveAlertHandler(store))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

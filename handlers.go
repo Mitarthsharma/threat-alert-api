@@ -288,3 +288,148 @@ func reportAlertHandler(store *Store) http.HandlerFunc {
 		writeJSON(w, http.StatusCreated, alert)
 	}
 }
+
+func getAlertsHandler(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// 1. Authenticate the user
+		user, ok := authenticate(r, store)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		// 2. Only admin and viewer roles are allowed
+		if user.Role != "admin" && user.Role != "viewer" {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		// 3. Read and validate the status filter
+		status := r.URL.Query().Get("status")
+
+		if status != "" && status != "open" && status != "resolved" {
+			writeError(w, http.StatusBadRequest, "invalid status")
+			return
+		}
+
+		// 4. Find alerts belonging to this user's company
+		alerts := make([]Alert, 0)
+
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		for _, alert := range store.Alerts {
+
+			app, exists := store.Apps[alert.AppID]
+			if !exists || app.OrgID != user.OrgID {
+				continue
+			}
+
+			// Apply status filter if provided
+			if status != "" && alert.Status != status {
+				continue
+			}
+
+			alerts = append(alerts, alert)
+		}
+
+		// 5. Return the alerts
+		writeJSON(w, http.StatusOK, map[string]any{
+			"alerts": alerts,
+		})
+	}
+}
+
+func getAlertByIDHandler(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// 1. Authenticate user
+		user, ok := authenticate(r, store)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		// 2. Check user role
+		if user.Role != "admin" && user.Role != "viewer" {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		// 3. Get alert ID from URL
+		alertID := r.PathValue("id")
+
+		// 4. Find the alert
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		alert, exists := store.Alerts[alertID]
+		if !exists {
+			writeError(w, http.StatusNotFound, "alert not found")
+			return
+		}
+
+		// 5. Check company ownership
+		app, exists := store.Apps[alert.AppID]
+		if !exists || app.OrgID != user.OrgID {
+			writeError(w, http.StatusNotFound, "alert not found")
+			return
+		}
+
+		// 6. Return alert
+		writeJSON(w, http.StatusOK, alert)
+	}
+}
+
+func resolveAlertHandler(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// 1. Authenticate user
+		user, ok := authenticate(r, store)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		// 2. Only admins can resolve alerts
+		if user.Role != "admin" {
+			writeError(w, http.StatusForbidden, "only admin can resolve alerts")
+			return
+		}
+
+		// 3. Get alert ID
+		alertID := r.PathValue("id")
+
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		// 4. Find alert
+		alert, exists := store.Alerts[alertID]
+		if !exists {
+			writeError(w, http.StatusNotFound, "alert not found")
+			return
+		}
+
+		// 5. Check company ownership
+		app, exists := store.Apps[alert.AppID]
+		if !exists || app.OrgID != user.OrgID {
+			writeError(w, http.StatusNotFound, "alert not found")
+			return
+		}
+
+		// 6. Check if already resolved
+		if alert.Status == "resolved" {
+			writeError(w, http.StatusConflict, "alert already resolved")
+			return
+		}
+
+		// 7. Resolve alert
+		alert.Status = "resolved"
+		alert.ResolvedBy = user.UserID
+
+		store.Alerts[alertID] = alert
+
+		writeJSON(w, http.StatusOK, alert)
+	}
+}
