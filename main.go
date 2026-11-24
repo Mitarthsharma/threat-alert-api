@@ -14,6 +14,7 @@ func main() {
 	mux.HandleFunc("POST /register", registerHandler(store))
 	mux.HandleFunc("POST /users", createUserHandler(store))
 mux.HandleFunc("POST /apps", createAppHandler(store))
+mux.HandleFunc("POST /alerts", reportAlertHandler(store))
 
 	port := os.Getenv("PORT")
 	if port == "" {

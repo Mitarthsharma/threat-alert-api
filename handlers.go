@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strings"
+	"time"
 )
 
 func registerHandler(store *Store) http.HandlerFunc {
@@ -196,5 +197,94 @@ func createAppHandler(store *Store) http.HandlerFunc {
 		store.mu.Unlock()
 
 		writeJSON(w, http.StatusCreated, app)
+	}
+}
+
+func reportAlertHandler(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// Authenticate SDK using app key
+		appKey := r.Header.Get("X-App-Key")
+
+		store.mu.Lock()
+		appID, exists := store.AppKeys[appKey]
+		_, appExists := store.Apps[appID]
+		store.mu.Unlock()
+
+		if appKey == "" || !exists || !appExists {
+			writeError(w, http.StatusUnauthorized, "invalid app key")
+			return
+		}
+
+		// Read request body
+		var req struct {
+			DeviceID   string `json:"deviceId"`
+			ThreatType string `json:"threatType"`
+			Severity   int    `json:"severity"`
+		}
+
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+
+		req.DeviceID = strings.TrimSpace(req.DeviceID)
+		req.ThreatType = strings.TrimSpace(req.ThreatType)
+
+		if isEmpty(req.DeviceID) ||
+			isEmpty(req.ThreatType) ||
+			req.Severity < 1 || req.Severity > 5 {
+
+			writeError(w, http.StatusBadRequest, "invalid alert details")
+			return
+		}
+
+		now := time.Now().UTC()
+
+		// Lock while checking and updating alerts
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		// Check for an existing open alert
+		for id, alert := range store.Alerts {
+
+			if alert.AppID == appID &&
+				alert.DeviceID == req.DeviceID &&
+				alert.ThreatType == req.ThreatType &&
+				alert.Status == "open" {
+
+				alert.Count++
+				alert.LastSeen = now
+
+				store.Alerts[id] = alert
+
+				writeJSON(w, http.StatusOK, alert)
+				return
+			}
+		}
+
+		// Create a new alert
+		alertID, err := generateRandomString()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not generate alert ID")
+			return
+		}
+
+		alert := Alert{
+			ID:         alertID,
+			AppID:      appID,
+			DeviceID:   req.DeviceID,
+			ThreatType: req.ThreatType,
+			Severity:   req.Severity,
+			Count:      1,
+			Status:     "open",
+			FirstSeen:  now,
+			LastSeen:   now,
+			ResolvedBy: "",
+		}
+
+		store.Alerts[alertID] = alert
+
+		writeJSON(w, http.StatusCreated, alert)
 	}
 }
